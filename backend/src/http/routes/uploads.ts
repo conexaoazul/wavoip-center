@@ -103,7 +103,12 @@ export async function uploadsRoutes(app: FastifyInstance) {
       const fields: any = data.fields ?? {};
       whatsappCallId = fields?.whatsappCallId?.value;
       const cid = fields?.callId?.value;
-      if (cid) callIdParam = Number(cid);
+      if (cid) {
+        const parsedCallId = Number(cid);
+        if (Number.isSafeInteger(parsedCallId) && parsedCallId > 0) {
+          callIdParam = parsedCallId;
+        }
+      }
     } catch {}
 
     await ensureDir();
@@ -128,35 +133,25 @@ export async function uploadsRoutes(app: FastifyInstance) {
       "Recording uploaded"
     );
 
+    // Somente um ID exato e confiável pode vincular gravação a uma chamada.
+    // Nunca atribuir a gravação à chamada mais recente: isso mistura contatos
+    // e pode acionar transcrição/CRM da pessoa errada.
     let call: any = null;
     if (callIdParam) {
       call = await prisma.call.findUnique({ where: { id: callIdParam } });
-    } else if (whatsappCallId) {
-      // Tenta match exato no whatsappCallId
-      call = await prisma.call.findUnique({ where: { whatsappCallId } });
-      // Fallback: chamada mais recente da ultima 1h
-      if (!call) {
-        call = await prisma.call.findFirst({
-          where: { startedAt: { gte: new Date(Date.now() - 60 * 60 * 1000) } },
-          orderBy: { startedAt: "desc" },
-        });
-        if (call) {
-          httpLogger.info(
-            { matchedCallId: call.id, whatsappCallId },
-            "Recording: whatsappCallId nao bateu - matchei a chamada mais recente"
-          );
-        }
+      if (call && whatsappCallId && call.whatsappCallId !== whatsappCallId) {
+        httpLogger.warn(
+          { callIdParam, whatsappCallId },
+          "Recording: callId e whatsappCallId divergentes; vínculo recusado"
+        );
+        call = null;
       }
-    } else {
-      // Sem hint - pega a chamada mais recente
-      call = await prisma.call.findFirst({
-        where: { startedAt: { gte: new Date(Date.now() - 60 * 60 * 1000) } },
-        orderBy: { startedAt: "desc" },
-      });
+    } else if (whatsappCallId) {
+      call = await prisma.call.findUnique({ where: { whatsappCallId } });
     }
 
     if (!call) {
-      httpLogger.warn({ whatsappCallId }, "Recording sem call match");
+      httpLogger.warn({ whatsappCallId }, "Recording sem identificador exato ou sem call match");
       return { ok: true, url, callId: null, note: "no call match" };
     }
 

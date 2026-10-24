@@ -14,7 +14,8 @@
     "db:generate": "prisma generate",
     "db:seed": "tsx prisma/seed.ts",
     "typecheck": "tsc --noEmit",
-    "lint": "tsc --noEmit"
+    "lint": "tsc --noEmit",
+    "test:voice-bridge": "tsx --test src/blueVoice/eventBridge.test.ts"
   },
   "engines": {
     "node": ">=20"

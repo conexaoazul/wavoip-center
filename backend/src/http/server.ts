@@ -5,6 +5,7 @@ import fastifyStatic from "@fastify/static";
 import path from "path";
 import fs from "fs";
 import { config } from "../config";
+import { requiresSensitivePabxAuth, checkSensitivePabxToken } from "./sensitiveAccess";
 import { httpLogger as logger } from "../utils/logger";
 import { healthRoutes } from "./routes/health";
 import { sessionRoutes } from "./routes/sessions";
@@ -38,6 +39,16 @@ export async function buildHttpServer(): Promise<FastifyInstance> {
     limits: { fileSize: 25 * 1024 * 1024 }, // 25MB
   });
 
+  // P0: prevent direct host-port access to raw call recordings and transcripts.
+  // Browser/audio consumers need a reviewed authenticated proxy before rollout.
+  // Without a vault-managed 32+ char key these routes fail closed.
+  app.addHook("onRequest", async (req, reply) => {
+    if (requiresSensitivePabxAuth(req.method, req.url)
+        && !checkSensitivePabxToken(config.PABX_SENSITIVE_API_TOKEN,
+            req.headers["x-pabx-internal-token"])) {
+      return reply.code(401).send({ error: "UNAUTHORIZED" });
+    }
+  });
   const uploadDir = path.resolve(process.cwd(), ".uploads");
   if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
   await app.register(fastifyStatic, {

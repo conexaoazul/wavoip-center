@@ -3,6 +3,8 @@ import { EventEmitter } from "events";
 export type CallEventPayload = {
   sessionId: number;
   callId?: number;
+  /** Durable CallEvent primary key, shared across retries/reconciliation. */
+  sourceEventId?: number;
   whatsappCallId?: string;
   from: string;
   to?: string;

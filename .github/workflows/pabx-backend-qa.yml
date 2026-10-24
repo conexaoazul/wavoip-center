@@ -31,3 +31,5 @@ jobs:
         run: npm run typecheck
       - name: Compile
         run: npm run build
+      - name: Recording identity regression tests
+        run: npx tsx --test src/http/routes/recordingIdentity.test.ts

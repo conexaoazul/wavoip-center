@@ -11,7 +11,7 @@ export type RecordingCallLookup<T extends RecordingCallIdentity> = {
 };
 
 export async function resolveRecordingCall<T extends RecordingCallIdentity>(
-  fields: Record<string, { value?: unknown }> | undefined,
+  fields: Record<string, { value?: unknown } | undefined> | undefined,
   lookup: RecordingCallLookup<T>,
 ): Promise<T | null> {
   const rawId = fields?.callId?.value;

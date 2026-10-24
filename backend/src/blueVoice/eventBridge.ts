@@ -5,6 +5,7 @@ import { logger } from "../utils/logger";
 
 type VoiceEventType =
   | "voice.call.created"
+  | "voice.call.answered"
   | "voice.call.completed"
   | "voice.call.missed"
   | "voice.call.failed"
@@ -36,7 +37,9 @@ export function canonicalVoiceEvent(
   payload: CallPayload
 ): InternalVoiceEvent | null {
   const callId = payload.callId;
+  const sourceEventId = payload.sourceEventId;
   if (!Number.isSafeInteger(callId) || !callId || callId <= 0) return null;
+  if (!Number.isSafeInteger(sourceEventId) || !sourceEventId || sourceEventId <= 0) return null;
   if (!Number.isSafeInteger(payload.sessionId) || payload.sessionId <= 0) return null;
   if (!Number.isFinite(payload.timestamp)) return null;
 
@@ -48,7 +51,7 @@ export function canonicalVoiceEvent(
     typeof duration === "number" && Number.isInteger(duration)
       && duration >= 0 && duration <= 86400 ? duration : null;
   const providerCallId = `pabx:${payload.sessionId}:${callId}`;
-  const eventId = `pabx:${payload.sessionId}:${callId}:${eventType}`;
+  const eventId = `pabx:event:${sourceEventId}`;
   return {
     schema_version: "1.0",
     provider: "wavoip",
@@ -119,6 +122,9 @@ export function startInternalVoiceBridge(): void {
   // WhatsApp sends are performed here.
   eventBus.on("call.persisted", (payload) => {
     void send("voice.call.created", payload);
+  });
+  eventBus.on("call.answered.persisted", (payload) => {
+    void send("voice.call.answered", payload);
   });
   eventBus.on("call.completed", (payload) => {
     const type: VoiceEventType = payload.status === "missed"

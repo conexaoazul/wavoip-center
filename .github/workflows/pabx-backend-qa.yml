@@ -33,3 +33,5 @@ jobs:
         run: npm run build
       - name: Recording identity regression tests
         run: npx tsx --test src/http/routes/recordingIdentity.test.ts
+      - name: Sensitive API access tests
+        run: npx tsx --test src/http/sensitiveAccess.test.ts

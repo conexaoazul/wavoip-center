@@ -316,7 +316,7 @@ export async function setSetting<K extends SettingKey>(
     update: { value: serialize(parsed) },
   });
   cache.set(key, parsed);
-  settingsLogger.info({ key, value: def.secret ? "[REDACTED]" : parsed }, "Setting updated");
+  settingsLogger.info({ key, value: ("secret" in def && def.secret) ? "[REDACTED]" : parsed }, "Setting updated");
 }
 
 export async function resetSetting(key: SettingKey): Promise<void> {

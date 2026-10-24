@@ -17,6 +17,7 @@ import path from "path";
 import crypto from "crypto";
 import { AppError } from "../../utils/errors";
 import { config } from "../../config";
+import { resolveRecordingCall } from "./recordingIdentity";
 
 const UPLOAD_DIR = path.resolve(process.cwd(), ".uploads");
 
@@ -97,78 +98,60 @@ export async function uploadsRoutes(app: FastifyInstance) {
     const data = await (req as any).file();
     if (!data) throw new AppError("Nenhum arquivo enviado", 400);
 
-    let whatsappCallId: string | undefined;
-    let callIdParam: number | undefined;
-    try {
-      const fields: any = data.fields ?? {};
-      whatsappCallId = fields?.whatsappCallId?.value;
-      const cid = fields?.callId?.value;
-      if (cid) {
-        const parsedCallId = Number(cid);
-        if (Number.isSafeInteger(parsedCallId) && parsedCallId > 0) {
-          callIdParam = parsedCallId;
-        }
-      }
-    } catch {}
-
-    await ensureDir();
-    const recDir = path.join(UPLOAD_DIR, "recordings");
-    await fs.mkdir(recDir, { recursive: true });
-
-    const id = crypto.randomBytes(8).toString("hex");
-    const ext = path.extname(data.filename || "").slice(0, 8) || ".webm";
-    const filename = `rec-${id}${ext}`;
-    const dest = path.join(recDir, filename);
+    // Consume the multipart file before reading fields so metadata is available
+    // regardless of whether the client sends file first or last.
+    // The 25MB plugin limit still applies; invalid uploads are never persisted.
     const buf = await data.toBuffer();
-    await fs.writeFile(dest, buf);
-
-    const url = publicUrl(`recordings/${filename}`);
+    if (!buf.length) throw new AppError("Gravação vazia", 422);
 
     const { prisma } = await import("../../db/client");
     const { eventBus } = await import("../../pabx/eventBus");
     const { httpLogger } = await import("../../utils/logger");
 
-    httpLogger.info(
-      { whatsappCallId, callIdParam, size: buf.length, filename },
-      "Recording uploaded"
-    );
-
-    // Somente um ID exato e confiável pode vincular gravação a uma chamada.
-    // Nunca atribuir a gravação à chamada mais recente: isso mistura contatos
-    // e pode acionar transcrição/CRM da pessoa errada.
-    let call: any = null;
-    if (callIdParam) {
-      call = await prisma.call.findUnique({ where: { id: callIdParam } });
-      if (call && whatsappCallId && call.whatsappCallId !== whatsappCallId) {
-        httpLogger.warn(
-          { callIdParam, whatsappCallId },
-          "Recording: callId e whatsappCallId divergentes; vínculo recusado"
-        );
-        call = null;
+    const call = await resolveRecordingCall(
+      data.fields as Record<string, { value?: unknown }>,
+      {
+        byId: (id) => prisma.call.findUnique({ where: { id } }),
+        byWhatsappCallId: (id) =>
+          prisma.call.findUnique({ where: { whatsappCallId: id } }),
       }
-    } else if (whatsappCallId) {
-      call = await prisma.call.findUnique({ where: { whatsappCallId } });
-    }
-
+    );
     if (!call) {
-      httpLogger.warn({ whatsappCallId }, "Recording sem identificador exato ou sem call match");
-      return { ok: true, url, callId: null, note: "no call match" };
+      // Do not store unassociated audio, return its URL, or guess the last call.
+      httpLogger.warn("Recording rejected: no exact persisted call match");
+      throw new AppError("Referência de chamada ausente ou divergente", 422);
     }
 
-    const recordingEvent = await prisma.$transaction(async (tx) => {
-      await tx.callSummary.upsert({
-        where: { callId: call.id },
-        create: { callId: call.id, recordingUrl: url },
-        update: { recordingUrl: url },
+    const recDir = path.join(UPLOAD_DIR, "recordings");
+    await fs.mkdir(recDir, { recursive: true, mode: 0o700 });
+    const id = crypto.randomBytes(8).toString("hex");
+    const ext = path.extname(data.filename || "").slice(0, 8) || ".webm";
+    const filename = `rec-${id}${ext}`;
+    const dest = path.join(recDir, filename);
+    const url = publicUrl(`recordings/${filename}`);
+    await fs.writeFile(dest, buf, { flag: "wx", mode: 0o600 });
+
+    let recordingEvent: { id: number; createdAt: Date };
+    try {
+      recordingEvent = await prisma.$transaction(async (tx) => {
+        await tx.callSummary.upsert({
+          where: { callId: call.id },
+          create: { callId: call.id, recordingUrl: url },
+          update: { recordingUrl: url },
+        });
+        return tx.callEvent.create({
+          data: { callId: call.id, type: "recording_uploaded", payload: null },
+        });
       });
-      return tx.callEvent.create({
-        data: { callId: call.id, type: "recording_uploaded", payload: null },
-      });
-    });
+    } catch (error) {
+      // A DB failure must not leave an orphaned recording on disk.
+      await fs.unlink(dest).catch(() => undefined);
+      throw error;
+    }
 
     httpLogger.info(
-      { callId: call.id, url },
-      "CallSummary atualizado com recordingUrl - disparando aiSummary"
+      { callId: call.id, size: buf.length },
+      "Recording linked to exact call - dispatching summary"
     );
 
     // Evento DEDICADO pra recording uploaded - so o aiSummary escuta

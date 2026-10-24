@@ -155,10 +155,15 @@ export async function uploadsRoutes(app: FastifyInstance) {
       return { ok: true, url, callId: null, note: "no call match" };
     }
 
-    await prisma.callSummary.upsert({
-      where: { callId: call.id },
-      create: { callId: call.id, recordingUrl: url },
-      update: { recordingUrl: url },
+    const recordingEvent = await prisma.$transaction(async (tx) => {
+      await tx.callSummary.upsert({
+        where: { callId: call.id },
+        create: { callId: call.id, recordingUrl: url },
+        update: { recordingUrl: url },
+      });
+      return tx.callEvent.create({
+        data: { callId: call.id, type: "recording_uploaded", payload: null },
+      });
     });
 
     httpLogger.info(
@@ -175,7 +180,8 @@ export async function uploadsRoutes(app: FastifyInstance) {
       direction: call.direction,
       durationSec: call.durationSec ?? 60,
       status: call.status,
-      timestamp: Date.now(),
+      sourceEventId: recordingEvent.id,
+      timestamp: recordingEvent.createdAt.getTime(),
       _recordingAvailable: true,
     });
 

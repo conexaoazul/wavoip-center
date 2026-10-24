@@ -21,9 +21,15 @@ eventBus.on("call.incoming", async (payload) => {
           create: { type: "ring", payload: JSON.stringify(payload.raw ?? null) },
         },
       },
+      include: { events: { orderBy: { id: "desc" }, take: 1 } },
     });
     payload.callId = call.id;
-    eventBus.emit("call.persisted", payload);
+    const sourceEvent = call.events[0];
+    eventBus.emit("call.persisted", {
+      ...payload,
+      sourceEventId: sourceEvent?.id,
+      timestamp: sourceEvent?.createdAt?.getTime() ?? payload.timestamp,
+    });
     logger.info({ callId: call.id, from: payload.from }, "Incoming call logged");
   } catch (e) {
     logger.error({ err: e, payload }, "Failed to log incoming call");
@@ -33,12 +39,23 @@ eventBus.on("call.incoming", async (payload) => {
 eventBus.on("call.accepted", async (payload) => {
   if (!payload.whatsappCallId) return;
   try {
-    await prisma.call.update({
+    const updated = await prisma.call.update({
       where: { whatsappCallId: payload.whatsappCallId },
       data: {
         status: "answered",
         events: { create: { type: "accept", payload: JSON.stringify(payload.raw ?? null) } },
       },
+      include: { events: { orderBy: { id: "desc" }, take: 1 } },
+    });
+    const sourceEvent = updated.events[0];
+    eventBus.emit("call.answered.persisted", {
+      ...payload,
+      callId: updated.id,
+      sessionId: updated.sessionId,
+      from: updated.fromNumber,
+      direction: updated.direction as "incoming" | "outgoing",
+      sourceEventId: sourceEvent?.id,
+      timestamp: sourceEvent?.createdAt?.getTime() ?? payload.timestamp,
     });
   } catch {}
 });
@@ -52,7 +69,7 @@ async function finalizeCall(payload: any, status: string) {
     if (!call) return;
     const durationSec =
       payload.durationSec ?? Math.round((Date.now() - call.startedAt.getTime()) / 1000);
-    await prisma.call.update({
+    const updated = await prisma.call.update({
       where: { id: call.id },
       data: {
         status,
@@ -60,7 +77,9 @@ async function finalizeCall(payload: any, status: string) {
         endedAt: new Date(),
         events: { create: { type: status, payload: JSON.stringify(payload.raw ?? null) } },
       },
+      include: { events: { orderBy: { id: "desc" }, take: 1 } },
     });
+    const sourceEvent = updated.events[0];
     // Re-emite com callId/durationSec setados - listeners de NPS/IA/Followup
     // dependem desses campos (registrados via "call.completed.<status>")
     eventBus.emit("call.completed" as any, {
@@ -71,7 +90,8 @@ async function finalizeCall(payload: any, status: string) {
       direction: call.direction,
       durationSec,
       status,
-      timestamp: Date.now(),
+      sourceEventId: sourceEvent?.id,
+      timestamp: sourceEvent?.createdAt?.getTime() ?? Date.now(),
     });
     logger.info({ callId: call.id, status, durationSec }, "Call finalized");
   } catch (e) {

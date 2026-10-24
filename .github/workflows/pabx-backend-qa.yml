@@ -31,3 +31,5 @@ jobs:
         run: npm run typecheck
       - name: Compile
         run: npm run build
+      - name: Voice bridge unit tests
+        run: npm run test:voice-bridge

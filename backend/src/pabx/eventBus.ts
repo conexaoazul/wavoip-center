@@ -36,6 +36,7 @@ export type SessionStatusPayload = {
 type Events = {
   "call.incoming": CallEventPayload;
   "call.persisted": CallEventPayload;
+  "call.answered.persisted": CallEventPayload;
   "call.outgoing": CallEventPayload;
   "call.accepted": CallEventPayload;
   "call.rejected": CallTerminatedPayload;

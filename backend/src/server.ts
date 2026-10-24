@@ -26,6 +26,7 @@ import "./pabx/ivr/engine";
 import "./pabx/nps";
 import "./pabx/missedFollowup";
 import "./pabx/aiSummary";
+import { startInternalVoiceBridge } from "./blueVoice/eventBridge";
 
 async function main() {
   logger.info(
@@ -39,6 +40,9 @@ async function main() {
   );
 
   await initI18n();
+
+  // Registers internal PABX event listeners; disabled by default.
+  startInternalVoiceBridge();
 
   const app = await buildHttpServer();
 

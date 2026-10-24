@@ -34,6 +34,12 @@ const ConfigSchema = z.object({
   IVR_TIMEOUT_SECONDS: z.coerce.number().int().positive().default(60),
   CORS_ORIGIN: z.string().default("*"),
 
+  // Integração unidirecional PABX -> n8n, exclusivamente interna e OFF.
+  BLUE_VOICE_EVENTS_ENABLED: z.enum(["true", "false"]).default("false")
+    .transform((value) => value === "true"),
+  BLUE_VOICE_EVENTS_URL: z.string().url().optional(),
+  BLUE_VOICE_EVENTS_TOKEN: z.string().optional(),
+
   // === IA (Fase 7) ===
   OPENAI_API_KEY: z.string().optional(),
   OPENAI_WHISPER_MODEL: z.string().default("gpt-4o-mini-transcribe"),

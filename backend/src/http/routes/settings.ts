@@ -98,13 +98,15 @@ export async function settingsRoutes(app: FastifyInstance) {
     assertValidKey(key);
     const body = SingleSchema.parse((req as any).body);
     await setSetting(key, body.value as any);
-    return { ok: true, key, value: await getSetting(key) };
+    const isSecret = (SETTING_DEFS[key] as any).secret === true;
+    return { ok: true, key, value: isSecret ? "********" : await getSetting(key) };
   });
 
   app.delete("/settings/:key", async (req) => {
     const key = (req.params as any).key as string;
     assertValidKey(key);
     await resetSetting(key);
-    return { ok: true, key, value: await getSetting(key), overridden: false };
+    const isSecret = (SETTING_DEFS[key] as any).secret === true;
+    return { ok: true, key, value: isSecret ? "********" : await getSetting(key), overridden: false };
   });
 }

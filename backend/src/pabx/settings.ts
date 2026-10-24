@@ -316,7 +316,7 @@ export async function setSetting<K extends SettingKey>(
     update: { value: serialize(parsed) },
   });
   cache.set(key, parsed);
-  settingsLogger.info({ key, value: parsed }, "Setting updated");
+  settingsLogger.info({ key, value: ("secret" in def && def.secret) ? "[REDACTED]" : parsed }, "Setting updated");
 }
 
 export async function resetSetting(key: SettingKey): Promise<void> {
@@ -327,10 +327,8 @@ export async function resetSetting(key: SettingKey): Promise<void> {
 }
 
 function maskSecret(raw: SettingValue): string {
-  const s = String(raw);
-  if (!s) return "";
-  if (s.length <= 8) return "********";
-  return `${s.slice(0, 4)}...${s.slice(-4)}`;
+  // Não exponha prefixo/sufixo de tokens nem permita inferência por tamanho.
+  return String(raw) ? "********" : "";
 }
 
 export async function listSettings(): Promise<

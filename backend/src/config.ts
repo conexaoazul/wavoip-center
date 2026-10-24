@@ -33,6 +33,9 @@ const ConfigSchema = z.object({
 
   IVR_TIMEOUT_SECONDS: z.coerce.number().int().positive().default(60),
   CORS_ORIGIN: z.string().default("*"),
+  // Internal-only sensitive media API. No token => recording/media/summary routes deny.
+  // Provision via secret store, never reuse JWT_SECRET or WhatsApp provider keys.
+  PABX_SENSITIVE_API_TOKEN: z.string().optional(),
 
   // === IA (Fase 7) ===
   OPENAI_API_KEY: z.string().optional(),

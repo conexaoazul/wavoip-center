@@ -32,7 +32,7 @@ export async function resolveRecordingCall<T extends RecordingCallIdentity>(
   let whatsappCallId: string | undefined;
   if (hasWhatsappId) {
     if (typeof rawWhatsappId !== "string" || rawWhatsappId.length > 256
-        || !/^\\S+$/.test(rawWhatsappId)) return null;
+        || Array.from(rawWhatsappId).some(ch => ch.charCodeAt(0) <= 32)) return null;
     whatsappCallId = rawWhatsappId;
   }
 

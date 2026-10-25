@@ -37,6 +37,12 @@ const ConfigSchema = z.object({
   // Provision via secret store, never reuse JWT_SECRET or WhatsApp provider keys.
   PABX_SENSITIVE_API_TOKEN: z.string().optional(),
 
+  // Integração unidirecional PABX -> n8n, exclusivamente interna e OFF.
+  BLUE_VOICE_EVENTS_ENABLED: z.enum(["true", "false"]).default("false")
+    .transform((value) => value === "true"),
+  BLUE_VOICE_EVENTS_URL: z.string().url().optional(),
+  BLUE_VOICE_EVENTS_TOKEN: z.string().optional(),
+
   // === IA (Fase 7) ===
   OPENAI_API_KEY: z.string().optional(),
   OPENAI_WHISPER_MODEL: z.string().default("gpt-4o-mini-transcribe"),

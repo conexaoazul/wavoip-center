@@ -131,13 +131,18 @@ export async function uploadsRoutes(app: FastifyInstance) {
     const url = publicUrl(`recordings/${filename}`);
     await fs.writeFile(dest, buf, { flag: "wx", mode: 0o600 });
 
+    let recordingEvent: { id: number; createdAt: Date };
     try {
-      await prisma.callSummary.upsert({
-        where: { callId: call.id },
-        create: { callId: call.id, recordingUrl: url },
-        update: { recordingUrl: url },
+      recordingEvent = await prisma.$transaction(async (tx) => {
+        await tx.callSummary.upsert({
+          where: { callId: call.id },
+          create: { callId: call.id, recordingUrl: url },
+          update: { recordingUrl: url },
+        });
+        return tx.callEvent.create({
+          data: { callId: call.id, type: "recording_uploaded", payload: null },
+        });
       });
-
     } catch (error) {
       // A DB failure must not leave an orphaned recording on disk.
       await fs.unlink(dest).catch(() => undefined);
@@ -158,7 +163,8 @@ export async function uploadsRoutes(app: FastifyInstance) {
       direction: call.direction,
       durationSec: call.durationSec ?? 60,
       status: call.status,
-      timestamp: Date.now(),
+      sourceEventId: recordingEvent.id,
+      timestamp: recordingEvent.createdAt.getTime(),
       _recordingAvailable: true,
     });
 

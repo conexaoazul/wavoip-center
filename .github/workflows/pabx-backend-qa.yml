@@ -35,3 +35,5 @@ jobs:
         run: npx tsx --test src/http/routes/recordingIdentity.test.ts
       - name: Sensitive API access tests
         run: npx tsx --test src/http/sensitiveAccess.test.ts
+      - name: Voice bridge unit tests
+        run: npm run test:voice-bridge
